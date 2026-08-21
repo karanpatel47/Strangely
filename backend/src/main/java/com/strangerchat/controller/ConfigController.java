@@ -9,12 +9,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Exposes STUN/TURN server configuration to the frontend at runtime.
- *
- * TURN credentials are provided through backend environment variables and
- * are never hardcoded into the frontend build.
- */
 @RestController
 public class ConfigController {
 
@@ -33,9 +27,22 @@ public class ConfigController {
     @GetMapping("/api/config/ice-servers")
     public IceServerConfig iceServers() {
 
+        System.out.println("========== WEBRTC CONFIG ==========");
+        System.out.println("STUN: " + stunServer);
+        System.out.println("TURN SERVERS PRESENT: "
+                + (turnServers != null && !turnServers.isBlank()));
+        System.out.println("TURN SERVER COUNT: "
+                + (turnServers == null || turnServers.isBlank()
+                ? 0
+                : turnServers.split(",").length));
+        System.out.println("TURN USERNAME PRESENT: "
+                + (turnUsername != null && !turnUsername.isBlank()));
+        System.out.println("TURN PASSWORD PRESENT: "
+                + (turnPassword != null && !turnPassword.isBlank()));
+        System.out.println("===================================");
+
         List<IceServerConfig.IceServer> servers = new ArrayList<>();
 
-        // STUN
         if (stunServer != null && !stunServer.isBlank()) {
             servers.add(
                     new IceServerConfig.IceServer(
@@ -46,7 +53,6 @@ public class ConfigController {
             );
         }
 
-        // TURN
         if (turnServers != null && !turnServers.isBlank()) {
 
             List<String> urls = Arrays.stream(turnServers.split(","))
@@ -54,15 +60,13 @@ public class ConfigController {
                     .filter(url -> !url.isBlank())
                     .toList();
 
-            if (!urls.isEmpty()) {
-                servers.add(
-                        new IceServerConfig.IceServer(
-                                urls,
-                                turnUsername,
-                                turnPassword
-                        )
-                );
-            }
+            servers.add(
+                    new IceServerConfig.IceServer(
+                            urls,
+                            turnUsername,
+                            turnPassword
+                    )
+            );
         }
 
         return new IceServerConfig(servers);
