@@ -3,25 +3,11 @@ package com.strangerchat.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.web.socket.config.annotation.*;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
-/**
- * STOMP over WebSocket configuration.
- *
- * Protocol (application destinations, prefixed with /app):
- *   /app/match/find        -> enter matchmaking queue
- *   /app/match/next        -> leave current room, re-enter queue
- *   /app/call/offer        -> forward SDP offer to room peer
- *   /app/call/answer       -> forward SDP answer to room peer
- *   /app/call/ice          -> forward ICE candidate to room peer
- *   /app/call/end          -> end call, leave room
- *   /app/chat/send         -> send chat message to room
- *
- * Subscriptions (broker topics, prefixed with /topic):
- *   /topic/room/{roomId}   -> all room events (match found, signaling, chat, peer left)
- *   /user/queue/errors     -> user-specific error channel
- */
 @Configuration
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
@@ -44,23 +30,27 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+
+        String[] origins = allowedOrigins
+                .split(",")
+                ;
+
         registry.addEndpoint("/ws")
-                .setAllowedOrigins(allowedOrigins.split(","))
+                .setAllowedOrigins(origins)
                 .addInterceptors(sessionInterceptor)
                 .setHandshakeHandler(new UserHandshakeHandler())
                 .withSockJS();
 
-        // Native WebSocket endpoint (no SockJS) for clients that support it directly
         registry.addEndpoint("/ws")
-                .setAllowedOrigins(allowedOrigins.split(","))
+                .setAllowedOrigins(origins)
                 .addInterceptors(sessionInterceptor)
                 .setHandshakeHandler(new UserHandshakeHandler());
     }
 
     @Override
-    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
-        // Caps well above what any legitimate SDP/ICE/chat payload needs, but
-        // prevents a malicious client from sending huge frames to exhaust memory.
+    public void configureWebSocketTransport(
+            WebSocketTransportRegistration registration) {
+
         registration.setMessageSizeLimit(128 * 1024);
         registration.setSendBufferSizeLimit(512 * 1024);
         registration.setSendTimeLimit(15_000);

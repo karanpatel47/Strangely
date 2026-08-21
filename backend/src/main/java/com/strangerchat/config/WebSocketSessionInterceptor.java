@@ -12,10 +12,16 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Assigns each incoming WS handshake an anonymous userId (no login required for MVP).
- * Reuses a client-supplied id from a cookie/header if present so reconnects can be
- * recognized, otherwise mints a new UUID. This id becomes the STOMP Principal name
- * via DefaultHandshakeHandler + this attribute.
+ * Assigns each incoming WebSocket handshake an anonymous userId.
+ *
+ * The frontend supplies the userId as a query parameter:
+ *
+ *   /ws?userId=<uuid>
+ *
+ * If the supplied value is missing or invalid, a new UUID is generated.
+ *
+ * The resulting ID is stored as a handshake attribute and is later used
+ * by the handshake handler as the STOMP Principal name.
  */
 @Component
 public class WebSocketSessionInterceptor implements HandshakeInterceptor {
@@ -23,23 +29,49 @@ public class WebSocketSessionInterceptor implements HandshakeInterceptor {
     public static final String USER_ID_ATTR = "userId";
 
     @Override
-    public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
-                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
+    public boolean beforeHandshake(
+            ServerHttpRequest request,
+            ServerHttpResponse response,
+            WebSocketHandler wsHandler,
+            Map<String, Object> attributes) {
+
         String userId = null;
+
         if (request instanceof ServletServerHttpRequest servletRequest) {
-            HttpServletRequest httpRequest = servletRequest.getServletRequest();
+            HttpServletRequest httpRequest =
+                    servletRequest.getServletRequest();
+
             userId = httpRequest.getParameter("userId");
         }
-        if (userId == null || userId.isBlank()) {
+
+        if (!isValidUuid(userId)) {
             userId = UUID.randomUUID().toString();
         }
+
         attributes.put(USER_ID_ATTR, userId);
+
         return true;
     }
 
+    private boolean isValidUuid(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return false;
+        }
+
+        try {
+            UUID.fromString(userId);
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
     @Override
-    public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response,
-                                WebSocketHandler wsHandler, Exception exception) {
-        // no-op
+    public void afterHandshake(
+            ServerHttpRequest request,
+            ServerHttpResponse response,
+            WebSocketHandler wsHandler,
+            Exception exception) {
+        // No-op.
     }
 }
