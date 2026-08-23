@@ -22,6 +22,7 @@ export function useMatchmaking() {
   const webrtc = useWebRTC({
     onIceCandidate: (candidate) => {
       if (!roomIdRef.current) return
+      console.log('[WebRTC] sending ICE candidate')
       signalingClient.sendIceCandidate({
         roomId: roomIdRef.current,
         type: 'ICE_CANDIDATE',
@@ -50,8 +51,14 @@ export function useMatchmaking() {
         webrtc.createPeerConnection(iceServersRef.current, localStreamRef.current)
 
         if (msg.initiator) {
-          const offer = await webrtc.createOffer()
-          signalingClient.sendOffer({ roomId: msg.roomId!, type: 'OFFER', payload: JSON.stringify(offer) })
+          try {
+            const offer = await webrtc.createOffer()
+            console.log('[WebRTC] sending offer')
+            signalingClient.sendOffer({ roomId: msg.roomId!, type: 'OFFER', payload: JSON.stringify(offer) })
+          } catch (error) {
+            console.error('[WebRTC] offer setup failed', error)
+            setErrorMessage('Could not start the video connection')
+          }
         }
         break
       }
@@ -76,19 +83,26 @@ export function useMatchmaking() {
   const handleSignal = useCallback(
     async (msg: SignalMessage) => {
       try {
+        if (msg.roomId !== roomIdRef.current) {
+          console.warn('[WebRTC] ignoring signal for inactive room')
+          return
+        }
         if (msg.type === 'OFFER') {
           const offer = JSON.parse(msg.payload) as RTCSessionDescriptionInit
           const answer = await webrtc.createAnswer(offer)
+          console.log('[WebRTC] sending answer')
           signalingClient.sendAnswer({ roomId: msg.roomId, type: 'ANSWER', payload: JSON.stringify(answer) })
         } else if (msg.type === 'ANSWER') {
           const answer = JSON.parse(msg.payload) as RTCSessionDescriptionInit
           await webrtc.acceptAnswer(answer)
         } else if (msg.type === 'ICE_CANDIDATE') {
+          console.log('[WebRTC] received ICE candidate')
           const candidate = JSON.parse(msg.payload) as RTCIceCandidateInit
           await webrtc.addRemoteIceCandidate(candidate)
         }
-      } catch (e) {
-        console.error('Signal handling failed', e)
+      } catch (error) {
+        console.error('[WebRTC] signal handling failed', error)
+        setErrorMessage('Video signaling failed')
       }
     },
     [webrtc]
@@ -132,7 +146,6 @@ export function useMatchmaking() {
         }
         localStreamRef.current = stream
         setLocalStream(stream)
-        setCallState('connecting_ws')
       } catch (err) {
         const kind = classifyMediaError(err)
         setErrorMessage(
@@ -141,13 +154,22 @@ export function useMatchmaking() {
             : 'Could not access your camera or microphone. Check that no other app is using them.'
         )
         setCallState('media_denied')
+        return
       }
 
       try {
         const config = await fetchIceServers()
+        console.log('[WebRTC] fetched ICE config:', config.iceServers.map(({ urls, username, credential }) => ({
+          urls,
+          hasUsername: Boolean(username),
+          hasCredential: Boolean(credential)
+        })))
         iceServersRef.current = config.iceServers
-      } catch {
-        // Fall back to the default STUN-only server already set above.
+        setCallState('connecting_ws')
+      } catch (error) {
+        console.error('[WebRTC] ICE config fetch failed', error)
+        setErrorMessage('Could not load video connection settings')
+        setCallState('error')
       }
     })()
 

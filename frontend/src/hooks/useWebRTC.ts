@@ -23,34 +23,47 @@ export function useWebRTC({ onIceCandidate, onConnectionStateChange }: Options) 
     (iceServers: IceServer[], localStream: MediaStream) => {
       closePeerConnection()
 
+      console.log('[WebRTC] ICE servers:', iceServers.map(({ urls, username, credential }) => ({
+        urls,
+        hasUsername: Boolean(username),
+        hasCredential: Boolean(credential)
+      })))
       const pc = new RTCPeerConnection({ iceServers: iceServers as RTCIceServer[] })
       pcRef.current = pc
 
       localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
+      console.log('[WebRTC] local tracks:', pc.getSenders())
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log('[WebRTC] onicecandidate')
           onIceCandidate(event.candidate.toJSON())
         }
       }
 
       pc.ontrack = (event) => {
-        setRemoteStream(event.streams[0])
+        console.log('[WebRTC] ontrack:', event.streams)
+        const stream = event.streams[0] ?? new MediaStream([event.track])
+        setRemoteStream(stream)
+        console.log('[WebRTC] remote tracks:', pc.getReceivers())
       }
 
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState as PeerConnectionState
+        console.log('[WebRTC] connectionState:', pc.connectionState)
         setConnectionState(state)
         onConnectionStateChange?.(state)
       }
 
+      pc.onsignalingstatechange = () => console.log('[WebRTC] signalingState:', pc.signalingState)
+      pc.onicegatheringstatechange = () => console.log('[WebRTC] iceGatheringState:', pc.iceGatheringState)
       pc.oniceconnectionstatechange = () => {
-        // Attempt an ICE restart once on failure before giving up - covers
-        // transient network blips (e.g. wifi -> cellular handoff).
-        if (pc.iceConnectionState === 'failed') {
-          pc.restartIce()
-        }
+        console.log('[WebRTC] iceConnectionState:', pc.iceConnectionState)
       }
+
+      console.log('[WebRTC] signalingState:', pc.signalingState)
+      console.log('[WebRTC] iceGatheringState:', pc.iceGatheringState)
+      console.log('[WebRTC] iceConnectionState:', pc.iceConnectionState)
 
       return pc
     },
@@ -60,26 +73,44 @@ export function useWebRTC({ onIceCandidate, onConnectionStateChange }: Options) 
   const createOffer = useCallback(async (): Promise<RTCSessionDescriptionInit> => {
     const pc = pcRef.current
     if (!pc) throw new Error('No active peer connection')
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-    return offer
+    try {
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      console.log('[WebRTC] offer created and local description set')
+      return offer
+    } catch (error) {
+      console.error('[WebRTC] createOffer/setLocalDescription failed', error)
+      throw error
+    }
   }, [])
 
   const createAnswer = useCallback(async (offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> => {
     const pc = pcRef.current
     if (!pc) throw new Error('No active peer connection')
-    await pc.setRemoteDescription(offer)
-    await flushPendingCandidates()
-    const answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-    return answer
+    try {
+      await pc.setRemoteDescription(offer)
+      await flushPendingCandidates()
+      const answer = await pc.createAnswer()
+      await pc.setLocalDescription(answer)
+      console.log('[WebRTC] remote offer accepted; answer created and local description set')
+      return answer
+    } catch (error) {
+      console.error('[WebRTC] createAnswer/setRemoteDescription failed', error)
+      throw error
+    }
   }, [])
 
   const acceptAnswer = useCallback(async (answer: RTCSessionDescriptionInit) => {
     const pc = pcRef.current
     if (!pc) throw new Error('No active peer connection')
-    await pc.setRemoteDescription(answer)
-    await flushPendingCandidates()
+    try {
+      await pc.setRemoteDescription(answer)
+      await flushPendingCandidates()
+      console.log('[WebRTC] remote answer accepted')
+    } catch (error) {
+      console.error('[WebRTC] setRemoteDescription(answer) failed', error)
+      throw error
+    }
   }, [])
 
   const addRemoteIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
@@ -88,12 +119,15 @@ export function useWebRTC({ onIceCandidate, onConnectionStateChange }: Options) 
       // Buffer candidates that arrive before the remote description is set
       // (common when ICE gathering starts fast on the offering side).
       pendingCandidates.current.push(candidate)
+      console.log('[WebRTC] queued ICE candidate until remote description is set')
       return
     }
     try {
       await pc.addIceCandidate(candidate)
-    } catch {
-      // Ignore malformed/late candidates rather than crashing the call.
+      console.log('[WebRTC] remote ICE candidate added')
+    } catch (error) {
+      console.error('[WebRTC] addIceCandidate failed', error)
+      throw error
     }
   }, [])
 
@@ -105,8 +139,10 @@ export function useWebRTC({ onIceCandidate, onConnectionStateChange }: Options) 
     for (const c of queued) {
       try {
         await pc.addIceCandidate(c)
-      } catch {
-        /* ignore */
+        console.log('[WebRTC] queued ICE candidate added')
+      } catch (error) {
+        console.error('[WebRTC] queued addIceCandidate failed', error)
+        throw error
       }
     }
   }

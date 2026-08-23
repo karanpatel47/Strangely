@@ -14,9 +14,15 @@ export function VideoPlayer({ stream, muted, mirrored, label, placeholderText, s
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream
-    }
+    const video = videoRef.current
+    if (!video) return
+
+    video.srcObject = stream
+    if (!stream) return
+
+    video.play().catch((error) => {
+      console.error('[WebRTC] video.play() failed', error)
+    })
   }, [stream])
 
   return (

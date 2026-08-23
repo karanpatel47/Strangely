@@ -12,7 +12,9 @@ export async function getLocalMedia(): Promise<MediaStream> {
   let lastError: unknown = null
   for (const constraints of attempts) {
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints)
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      console.log('[WebRTC] local media acquired:', stream.getTracks().map((track) => track.kind))
+      return stream
     } catch (err) {
       lastError = err
     }
