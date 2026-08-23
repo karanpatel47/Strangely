@@ -7,10 +7,8 @@ import com.strangerchat.service.SessionPersistenceService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
@@ -28,6 +26,7 @@ import java.util.Optional;
  * malicious client from injecting signaling/chat traffic into a room it
  * isn't part of.
  */
+
 @Controller
 public class SignalingController {
 
@@ -76,7 +75,7 @@ public class SignalingController {
 
         MatchmakingService.Match m = match.get();
         persistenceService.recordSessionStart(m.roomId(), m.peerId(), userId);
-
+        
         // The peer (who was already waiting) initiates the SDP offer; the newly
         // arrived user waits for it. This avoids a "glare" where both send offers.
         sendToUser(m.peerId(), new RoomEventMessage(
