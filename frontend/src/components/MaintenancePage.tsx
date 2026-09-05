@@ -19,7 +19,7 @@ export default function MaintenancePage() {
                     </p>
 
                     <p className="text-xl font-semibold mt-1">
-                        Today at 10:00 PM 🚀
+                        Tommorow at 10:00 PM 🚀
                     </p>
                 </div>
 
