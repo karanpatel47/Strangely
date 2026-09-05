@@ -4,9 +4,14 @@ import { fetchIceServers } from '../services/api'
 import { classifyMediaError, getLocalMedia, stopStream } from '../utils/webrtc'
 import { useWebRTC } from './useWebRTC'
 import { useWebSocket } from './useWebSocket'
-import type { CallState, ChatEntry, ChatMessageDto, IceServer, RoomEventMessage, SignalMessage } from '../types'
+import type { CallState, ChatEntry, ChatMessageDto, Gender, IceServer, RoomEventMessage, SignalMessage } from '../types'
+import { dlog } from '../utils/debug'
 
-export function useMatchmaking() {
+interface UseMatchmakingProps {
+  gender: Gender | null
+}
+
+export function useMatchmaking({ gender }: UseMatchmakingProps) {
   const [callState, setCallState] = useState<CallState>('idle')
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [micOn, setMicOn] = useState(true)
@@ -22,7 +27,7 @@ export function useMatchmaking() {
   const webrtc = useWebRTC({
     onIceCandidate: (candidate) => {
       if (!roomIdRef.current) return
-      console.log('[WebRTC] sending ICE candidate')
+      dlog('[WebRTC] sending ICE candidate')
       signalingClient.sendIceCandidate({
         roomId: roomIdRef.current,
         type: 'ICE_CANDIDATE',
@@ -53,7 +58,7 @@ export function useMatchmaking() {
         if (msg.initiator) {
           try {
             const offer = await webrtc.createOffer()
-            console.log('[WebRTC] sending offer')
+            dlog('[WebRTC] sending offer')
             signalingClient.sendOffer({ roomId: msg.roomId!, type: 'OFFER', payload: JSON.stringify(offer) })
           } catch (error) {
             console.error('[WebRTC] offer setup failed', error)
@@ -90,13 +95,13 @@ export function useMatchmaking() {
         if (msg.type === 'OFFER') {
           const offer = JSON.parse(msg.payload) as RTCSessionDescriptionInit
           const answer = await webrtc.createAnswer(offer)
-          console.log('[WebRTC] sending answer')
+          dlog('[WebRTC] sending answer')
           signalingClient.sendAnswer({ roomId: msg.roomId, type: 'ANSWER', payload: JSON.stringify(answer) })
         } else if (msg.type === 'ANSWER') {
           const answer = JSON.parse(msg.payload) as RTCSessionDescriptionInit
           await webrtc.acceptAnswer(answer)
         } else if (msg.type === 'ICE_CANDIDATE') {
-          console.log('[WebRTC] received ICE candidate')
+          dlog('[WebRTC] received ICE candidate')
           const candidate = JSON.parse(msg.payload) as RTCIceCandidateInit
           await webrtc.addRemoteIceCandidate(candidate)
         }
@@ -130,10 +135,14 @@ export function useMatchmaking() {
     onSignal: handleSignal,
     onChat: handleChat,
     onError: handleWsError
-  })
+  }, gender)
 
   // Acquire camera/mic + ICE server config once on mount.
   useEffect(() => {
+    // No gender means ChatRoom is redirecting home — never prompt for
+    // camera/mic access in that case.
+    if (!gender) return
+
     let cancelled = false
     setCallState('requesting_media')
 
@@ -159,7 +168,7 @@ export function useMatchmaking() {
 
       try {
         const config = await fetchIceServers()
-        console.log('[WebRTC] fetched ICE config:', config.iceServers.map(({ urls, username, credential }) => ({
+        dlog('[WebRTC] fetched ICE config:', config.iceServers.map(({ urls, username, credential }) => ({
           urls,
           hasUsername: Boolean(username),
           hasCredential: Boolean(credential)
@@ -183,14 +192,14 @@ export function useMatchmaking() {
 
   // Once media + socket are both ready, enter the queue automatically.
   useEffect(() => {
-    if (callState === 'connecting_ws' && wsStatus === 'connected') {
-      signalingClient.findMatch()
+    if (callState === 'connecting_ws' && wsStatus === 'connected' && gender) {
+      signalingClient.findMatch({ gender })
       setCallState('searching')
     }
     if (wsStatus === 'failed') {
       setErrorMessage('Could not reach the server. Check your connection and try again.')
     }
-  }, [callState, wsStatus])
+  }, [callState, wsStatus, gender])
 
   const findNext = useCallback(() => {
     webrtc.closePeerConnection()
@@ -199,13 +208,18 @@ export function useMatchmaking() {
     peerIdRef.current = null
     setCallState('searching')
     signalingClient.next()
-  }, [webrtc])
+    if (gender) {
+      signalingClient.findMatch({ gender })
+    }
+  }, [webrtc, gender])
 
   const startSearchAgain = useCallback(() => {
     setChatLog([])
     setCallState('searching')
-    signalingClient.findMatch()
-  }, [])
+    if (gender) {
+      signalingClient.findMatch({ gender })
+    }
+  }, [gender])
 
   const endCall = useCallback(() => {
     webrtc.closePeerConnection()

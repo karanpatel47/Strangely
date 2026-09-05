@@ -8,6 +8,13 @@ export async function fetchIceServers(): Promise<IceServerConfig> {
   return res.json()
 }
 
+export async function fetchActiveUserCount(): Promise<number> {
+  const res = await fetch(`${API_URL}/stats/active-users`)
+  if (!res.ok) throw new Error('Failed to load active user count')
+  const data = (await res.json()) as { activeUsers: number }
+  return data.activeUsers
+}
+
 export async function reportUser(reportedUserId: string, roomId: string, reason: string, reporterId: string) {
   await fetch(`${API_URL}/reports`, {
     method: 'POST',

@@ -1,6 +1,8 @@
 com/strangerchat/dto/SignalType.class
 com/strangerchat/dto/IceServerConfig.class
+com/strangerchat/controller/StatsController.class
 com/strangerchat/service/RateLimitService.class
+com/strangerchat/dto/ActiveUserStatsResponse.class
 com/strangerchat/entity/ReportEntity.class
 com/strangerchat/service/SessionPersistenceService.class
 com/strangerchat/config/StompPrincipal.class
@@ -10,7 +12,9 @@ com/strangerchat/controller/DisconnectListener.class
 com/strangerchat/config/WebSocketSessionInterceptor.class
 com/strangerchat/dto/ChatMessageDto.class
 com/strangerchat/dto/RoomEventMessage$EventType.class
+com/strangerchat/dto/Gender.class
 com/strangerchat/entity/SessionEntity.class
+com/strangerchat/service/ActiveUserTracker.class
 com/strangerchat/repository/SessionRepository.class
 com/strangerchat/StrangerChatApplication.class
 com/strangerchat/controller/SignalingController.class
@@ -33,3 +37,4 @@ com/strangerchat/entity/UserEntity.class
 com/strangerchat/controller/HealthController.class
 com/strangerchat/dto/ReportRequest.class
 com/strangerchat/controller/ConfigController.class
+com/strangerchat/dto/FindMatchRequest.class

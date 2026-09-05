@@ -54,6 +54,7 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-change_me_in_production}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_SSL: ${REDIS_SSL:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       STUN_SERVER: ${STUN_SERVER:-stun:stun.l.google.com:19302}
       TURN_SERVER: ${TURN_SERVER:-turn:localhost:3478}

@@ -1,44 +1,103 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { VideoPlayer } from '../components/VideoPlayer'
 import { VideoControls } from '../components/VideoControls'
 import { ChatPanel } from '../components/ChatPanel'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { MatchmakingOverlay } from '../components/Matchmaking'
 import { useMatchmaking } from '../hooks/useMatchmaking'
+import type { Gender } from '../types'
 
 export default function ChatRoom() {
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Read gender synchronously from router state on the very first render
+  // (via the useState initializer) instead of setting it in an effect.
+  // Previously this component mounted with gender=null, called
+  // useMatchmaking({ gender: null }) on the first render, which kicked off
+  // a real getUserMedia() prompt and a WebSocket connection before the
+  // "no gender, redirect home" check even ran — then a second render with
+  // the real gender tore that down and reconnected everything again. Doing
+  // it this way means gender is correct (or null) from the very first
+  // render and never changes afterwards, so downstream hooks only ever do
+  // real work once.
+  const [gender] = useState<Gender | null>(() => (location.state as { gender?: Gender } | null)?.gender ?? null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  // ✅ CRITICAL: All hooks must be called at the top level, BEFORE any conditional returns
+  const matchmakingResult = useMatchmaking({ gender })
+
+  useEffect(() => {
+    if (!gender) {
+      navigate('/', { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (matchmakingResult?.errorMessage) {
+      setToast(matchmakingResult.errorMessage)
+      const t = setTimeout(() => {
+        setToast(null)
+        if (matchmakingResult?.clearError) {
+          matchmakingResult.clearError()
+        }
+      }, 5000)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchmakingResult?.errorMessage])
+
+  // Now conditional returns are OK since all hooks are already called
+  if (!gender) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-ink">
+        <div className="text-center">
+          <div className="mb-4 w-12 h-12 border-4 border-signal/30 border-t-signal rounded-full animate-spin mx-auto"></div>
+          <p className="text-textDim">Redirecting…</p>
+        </div>
+      </div>
+    )
+  }
+
   const {
     callState,
     localStream,
     remoteStream,
     chatLog,
-    errorMessage,
-    clearError,
     findNext,
     startSearchAgain,
     endCall,
     sendChatMessage
-  } = useMatchmaking()
+  } = matchmakingResult
 
-  const [toast, setToast] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (errorMessage) {
-      setToast(errorMessage)
-      const t = setTimeout(() => {
-        setToast(null)
-        clearError()
-      }, 5000)
-      return () => clearTimeout(t)
-    }
-  }, [errorMessage, clearError])
+  // Show error state if WebSocket fails
+  if (callState === 'error' || (callState === 'connecting_ws' && toast?.includes('Could not reach'))) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-ink p-6">
+        <div className="max-w-md text-center">
+          <div className="mb-4 text-4xl">⚠️</div>
+          <h2 className="text-xl font-bold text-text mb-2">Connection Failed</h2>
+          <p className="text-textDim mb-6">{toast || 'Could not connect to the server. Make sure it is running and try again.'}</p>
+          <button
+            onClick={() => {
+              setToast(null)
+              navigate('/')
+            }}
+            className="px-6 py-2 bg-signal text-ink rounded-lg font-semibold hover:opacity-90"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const chatActive = callState === 'connected' || callState === 'connecting_call'
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-ink">
       <header className="px-4 py-1 flex items-center justify-between border-b border-line shrink-0">
         <button onClick={() => navigate('/')} className="font-display font-bold tracking-tight text-lg">
           Strangely

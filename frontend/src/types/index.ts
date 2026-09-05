@@ -1,6 +1,12 @@
 // These mirror com.strangerchat.dto.* exactly - field names and enum values
 // must match the backend or STOMP (de)serialization will silently break.
 
+export type Gender = 'MALE' | 'FEMALE'
+
+export interface FindMatchRequest {
+  gender: Gender
+}
+
 export type SignalType = 'OFFER' | 'ANSWER' | 'ICE_CANDIDATE'
 
 export interface SignalMessage {

@@ -1,3 +1,5 @@
+import { dlog } from './debug'
+
 /**
  * Attempts high-quality video first, then progressively relaxes constraints
  * if the device/browser can't satisfy them, instead of failing outright.
@@ -13,7 +15,7 @@ export async function getLocalMedia(): Promise<MediaStream> {
   for (const constraints of attempts) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      console.log('[WebRTC] local media acquired:', stream.getTracks().map((track) => track.kind))
+      dlog('[WebRTC] local media acquired:', stream.getTracks().map((track) => track.kind))
       return stream
     } catch (err) {
       lastError = err

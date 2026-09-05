@@ -1,5 +1,6 @@
 package com.strangerchat.service;
 
+import com.strangerchat.dto.Gender;
 import com.strangerchat.entity.SessionEntity;
 import com.strangerchat.entity.UserEntity;
 import com.strangerchat.repository.SessionRepository;
@@ -28,16 +29,26 @@ public class SessionPersistenceService {
     }
 
     @Async
-    public void touchUser(String userId) {
+    public void touchUser(String userId, Gender gender) {
         userRepository.findById(userId).ifPresentOrElse(
-                u -> { u.setLastSeen(Instant.now()); userRepository.save(u); },
-                () -> userRepository.save(new UserEntity(userId))
+                u -> { 
+                    u.setLastSeen(Instant.now());
+                    u.setGender(gender);
+                    userRepository.save(u); 
+                },
+                () -> {
+                    UserEntity user = new UserEntity(userId);
+                    user.setGender(gender);
+                    userRepository.save(user);
+                }
         );
     }
 
     @Async
-    public void recordSessionStart(String roomId, String userA, String userB) {
+    public void recordSessionStart(String roomId, String userA, String userB, Gender userAGender, Gender userBGender) {
         SessionEntity session = new SessionEntity(roomId, userA, userB);
+        session.setUserAGender(userAGender);
+        session.setUserBGender(userBGender);
         sessionRepository.save(session);
         openSessions.put(roomId, session);
     }

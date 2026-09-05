@@ -1,5 +1,6 @@
 package com.strangerchat.entity;
 
+import com.strangerchat.dto.Gender;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -24,6 +25,9 @@ public class UserEntity {
 
     private boolean banned = false;
 
+    @Enumerated(EnumType.STRING)
+    private Gender gender;
+
     public UserEntity() {}
 
     public UserEntity(String id) {
@@ -40,4 +44,6 @@ public class UserEntity {
     public void setLastSeen(Instant lastSeen) { this.lastSeen = lastSeen; }
     public boolean isBanned() { return banned; }
     public void setBanned(boolean banned) { this.banned = banned; }
+    public Gender getGender() { return gender; }
+    public void setGender(Gender gender) { this.gender = gender; }
 }

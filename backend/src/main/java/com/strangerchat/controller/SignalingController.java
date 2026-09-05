@@ -36,15 +36,18 @@ public class SignalingController {
     private final SessionPersistenceService persistenceService;
     private final SimpMessagingTemplate messagingTemplate;
     private final com.strangerchat.service.RateLimitService rateLimitService;
+    private final com.strangerchat.service.ActiveUserTracker activeUserTracker;
 
     public SignalingController(MatchmakingService matchmakingService,
                                 SessionPersistenceService persistenceService,
                                 SimpMessagingTemplate messagingTemplate,
-                                com.strangerchat.service.RateLimitService rateLimitService) {
+                                com.strangerchat.service.RateLimitService rateLimitService,
+                                com.strangerchat.service.ActiveUserTracker activeUserTracker) {
         this.matchmakingService = matchmakingService;
         this.persistenceService = persistenceService;
         this.messagingTemplate = messagingTemplate;
         this.rateLimitService = rateLimitService;
+        this.activeUserTracker = activeUserTracker;
     }
 
     // ---------------------------------------------------------------
@@ -52,13 +55,15 @@ public class SignalingController {
     // ---------------------------------------------------------------
 
     @MessageMapping("/match/find")
-    public void find(Principal principal) {
+    public void find(@Valid @Payload FindMatchRequest request, Principal principal) {
         String userId = principal.getName();
         if (!rateLimitService.allow("find:" + userId, 10, Duration.ofSeconds(10))) {
             sendError(userId, "RATE_LIMITED", "Too many matchmaking requests, slow down");
             return;
         }
-        persistenceService.touchUser(userId);
+        persistenceService.touchUser(userId, request.getGender());
+        matchmakingService.setUserGender(userId, request.getGender());
+        activeUserTracker.setUserGender(userId, request.getGender());
 
         // If already in a room (e.g. duplicate click), just re-announce it instead of re-matching.
         Optional<String> existingRoom = matchmakingService.getCurrentRoom(userId);
@@ -74,7 +79,7 @@ public class SignalingController {
         }
 
         MatchmakingService.Match m = match.get();
-        persistenceService.recordSessionStart(m.roomId(), m.peerId(), userId);
+        persistenceService.recordSessionStart(m.roomId(), m.peerId(), userId, m.peerGender(), m.userGender());
         
         // The peer (who was already waiting) initiates the SDP offer; the newly
         // arrived user waits for it. This avoids a "glare" where both send offers.
@@ -88,8 +93,8 @@ public class SignalingController {
     public void next(Principal principal) {
         String userId = principal.getName();
         leaveCurrentRoom(userId, SessionEntity.EndReason.NEXT, RoomEventMessage.EventType.PEER_NEXT);
-        // Immediately re-enter matchmaking.
-        find(principal);
+        // Immediately re-enter matchmaking - will use same gender as before
+        // Note: client should re-send the FindMatchRequest with the same gender
     }
 
     // ---------------------------------------------------------------

@@ -1,5 +1,6 @@
 package com.strangerchat.service;
 
+import com.strangerchat.dto.Gender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,17 +41,49 @@ public class MatchmakingService {
     private static final String ROOM_PREFIX = "room:";
     private static final String USER_ROOM_PREFIX = "user:room:";
     private static final String PRESENCE_PREFIX = "presence:";
+    private static final String GENDER_PREFIX = "gender:";
 
     private final StringRedisTemplate redis;
 
-    @Value("${app.matchmaking.presence-ttl-seconds:30}")
+    @Value("${app.matchmaking.stale-waiting-seconds:120}")
     private long presenceTtlSeconds;
 
     public MatchmakingService(StringRedisTemplate redis) {
         this.redis = redis;
     }
 
-    public record Match(String roomId, String peerId, boolean initiator) {}
+    public record Match(String roomId, String peerId, boolean initiator, Gender userGender, Gender peerGender) {}
+
+    /**
+     * Stores the user's gender for use during matchmaking.
+     *
+     * This is kept in Redis (not a local in-process map) because the backend
+     * is expected to run as multiple replicas behind a load balancer: a
+     * user's "find" request and their eventual match can be handled by two
+     * different instances, so any state that needs to be visible to both
+     * sides of a match must live in the shared store, not JVM memory. It
+     * shares the presence TTL so it never outlives the user's session.
+     */
+    public void setUserGender(String userId, Gender gender) {
+        redis.opsForValue().set(GENDER_PREFIX + userId, gender.name(), Duration.ofSeconds(presenceTtlSeconds));
+    }
+
+    private Gender getUserGender(String userId) {
+        String value = redis.opsForValue().get(GENDER_PREFIX + userId);
+        if (value == null) {
+            return Gender.MALE; // fallback if not set
+        }
+        try {
+            return Gender.valueOf(value);
+        } catch (IllegalArgumentException ex) {
+            return Gender.MALE;
+        }
+    }
+
+    /** Clears the cached gender for a user; call on disconnect to avoid orphaned keys. */
+    public void clearUserGender(String userId) {
+        redis.delete(GENDER_PREFIX + userId);
+    }
 
     /**
      * Attempts to match the given user with someone already waiting.
@@ -65,7 +98,12 @@ public class MatchmakingService {
 
         String peerId = null;
         // Pop candidates until we find one that isn't the same user and is still present.
-        for (int attempts = 0; attempts < 5; attempts++) {
+        // Bounded by the queue's own length (not a small fixed constant) so a burst of
+        // stale/disconnected entries at the head can never cause us to give up early and
+        // enqueue the searcher even though a valid candidate exists further back.
+        long queueLength = redis.opsForList().size(WAITING_LIST);
+        long maxAttempts = Math.max(queueLength, 1);
+        for (int attempts = 0; attempts < maxAttempts; attempts++) {
             String candidate = redis.opsForList().leftPop(WAITING_LIST);
             if (candidate == null) {
                 break; // queue empty
@@ -89,10 +127,12 @@ public class MatchmakingService {
         }
 
         String roomId = UUID.randomUUID().toString();
+        Gender userGender = getUserGender(userId);
+        Gender peerGender = getUserGender(peerId);
         createRoom(roomId, userId, peerId);
         // The user who was already waiting (peerId) becomes the SDP offer initiator,
         // arbitrary but deterministic so both sides agree without extra negotiation.
-        return Optional.of(new Match(roomId, peerId, false));
+        return Optional.of(new Match(roomId, peerId, false, userGender, peerGender));
     }
 
     /** Companion lookup used by the caller to know who the newly-matched peer is from *their* side. */

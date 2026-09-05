@@ -1,5 +1,6 @@
 package com.strangerchat.config;
 
+import com.strangerchat.dto.Gender;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -22,11 +23,15 @@ import java.util.UUID;
  *
  * The resulting ID is stored as a handshake attribute and is later used
  * by the handshake handler as the STOMP Principal name.
+ *
+ * Optionally extracts a "gender" query parameter (MALE or FEMALE) and
+ * stores it as a handshake attribute for active-user statistics tracking.
  */
 @Component
 public class WebSocketSessionInterceptor implements HandshakeInterceptor {
 
     public static final String USER_ID_ATTR = "userId";
+    public static final String GENDER_ATTR = "gender";
 
     @Override
     public boolean beforeHandshake(
@@ -36,12 +41,14 @@ public class WebSocketSessionInterceptor implements HandshakeInterceptor {
             Map<String, Object> attributes) {
 
         String userId = null;
+        String genderParam = null;
 
         if (request instanceof ServletServerHttpRequest servletRequest) {
             HttpServletRequest httpRequest =
                     servletRequest.getServletRequest();
 
             userId = httpRequest.getParameter("userId");
+            genderParam = httpRequest.getParameter("gender");
         }
 
         if (!isValidUuid(userId)) {
@@ -49,6 +56,11 @@ public class WebSocketSessionInterceptor implements HandshakeInterceptor {
         }
 
         attributes.put(USER_ID_ATTR, userId);
+
+        Gender gender = parseGender(genderParam);
+        if (gender != null) {
+            attributes.put(GENDER_ATTR, gender);
+        }
 
         return true;
     }
@@ -63,6 +75,21 @@ public class WebSocketSessionInterceptor implements HandshakeInterceptor {
             return true;
         } catch (IllegalArgumentException exception) {
             return false;
+        }
+    }
+
+    /**
+     * Validates the gender query parameter against the Gender enum.
+     * Returns null if the value is missing, blank, or not a valid enum constant.
+     */
+    private Gender parseGender(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Gender.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return null;
         }
     }
 

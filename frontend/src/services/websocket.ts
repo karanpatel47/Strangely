@@ -3,8 +3,10 @@ import SockJS from 'sockjs-client'
 import type {
   ChatMessageDto,
   ErrorMessage,
+  FindMatchRequest,
   RoomEventMessage,
   SignalMessage,
+  Gender,
 } from '../types'
 
 const WS_URL =
@@ -25,17 +27,17 @@ export class SignalingClient {
   private subs: StompSubscription[] = []
 
   getUserId(): string {
-    let id = localStorage.getItem('stranger-chat-user-id')
+    let id = sessionStorage.getItem('stranger-chat-user-id')
 
     if (!id) {
       id = crypto.randomUUID()
-      localStorage.setItem('stranger-chat-user-id', id)
+      sessionStorage.setItem('stranger-chat-user-id', id)
     }
 
     return id
   }
 
-  connect(handlers: Handlers): Promise<void> {
+  connect(handlers: Handlers, gender?: Gender | null): Promise<void> {
     this.handlers = handlers
 
     const userId = this.getUserId()
@@ -46,10 +48,12 @@ export class SignalingClient {
       const client = new Client({
         webSocketFactory: () => {
           const sockJsUrl =
-            `${WS_URL}?userId=${encodeURIComponent(userId)}`
+            `${WS_URL}?userId=${encodeURIComponent(userId)}${gender ? `&gender=${encodeURIComponent(gender)}` : ''}`
 
           return new SockJS(sockJsUrl)
         },
+
+        connectHeaders: gender ? { gender } : {},
 
         reconnectDelay: 3000,
 
@@ -163,8 +167,8 @@ export class SignalingClient {
     )
   }
 
-  findMatch() {
-    this.publish('/app/match/find', {})
+  findMatch(request: FindMatchRequest) {
+    this.publish('/app/match/find', request)
   }
 
   next() {

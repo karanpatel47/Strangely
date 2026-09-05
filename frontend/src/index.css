@@ -33,3 +33,27 @@ body {
 .fade-in {
   animation: fade-in 0.25s ease-out;
 }
+
+@keyframes drift-slow {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(30px, 20px); }
+}
+@keyframes drift-slower {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-24px, -16px); }
+}
+.animate-drift-slow {
+  animation: drift-slow 14s ease-in-out infinite;
+}
+.animate-drift-slower {
+  animation: drift-slower 18s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-drift-slow,
+  .animate-drift-slower,
+  .pulse-ring,
+  .fade-in {
+    animation: none;
+  }
+}

@@ -23,8 +23,14 @@ public class RateLimitService {
     public boolean allow(String bucketKey, int maxPerWindow, Duration window) {
         String key = "ratelimit:" + bucketKey;
         Long count = redis.opsForValue().increment(key);
-        if (count != null && count == 1L) {
-            redis.expire(key, window);
+        if (count != null) {
+            // Guard against a crash/restart between INCR and EXPIRE leaving a
+            // key with no TTL, which would otherwise rate-limit that bucket
+            // forever instead of just for one window.
+            Long ttl = redis.getExpire(key);
+            if (count == 1L || ttl == null || ttl < 0) {
+                redis.expire(key, window);
+            }
         }
         return count == null || count <= maxPerWindow;
     }
